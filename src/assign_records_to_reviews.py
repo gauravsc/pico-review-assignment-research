@@ -8,6 +8,7 @@ from sklearn.svm import LinearSVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import precision_recall_fscore_support
+from sklearn.preprocessing import MinMaxScaler
 
 
 data_CRSD = pd.read_csv('../data/CRSDLinkedData.txt', encoding = "ISO-8859-1", error_bad_lines=False, delimiter='\t', usecols = ['RecordId', 'cn'])
@@ -47,15 +48,18 @@ X = df2[df2.columns[1:]].values
 Y = df1[df1.columns[1:]].values
 
 num_records = np.sum(Y, axis=0)
-Y = Y[:, num_records>4]
+Y = Y[:, num_records>20]
 
-# classifier initialized
-clf = LogisticRegression(random_state=0, solver='lbfgs', multi_class = 'multinomial')
+print ("Shape of Y:", Y.shape)
 
-thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]; score_labelwise = []
+
+
+# thresholds = [0.00626, 0.0125, 0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5,]
+thresholds = [0.00625, 0.0125 ,0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
+score_labelwise = []
 for i in range(Y.shape[1]):
 	y = Y[:,i]
-	skf = StratifiedKFold(n_splits=2)
+	skf = StratifiedKFold(n_splits=10)
 	skf.get_n_splits(X, y)
 	splits = list(skf.split(X, y))
 
@@ -66,14 +70,19 @@ for i in range(Y.shape[1]):
 			X_train, X_test = X[train_index], X[test_index]
 			y_train, y_test = y[train_index], y[test_index]
 
+			# classifier initialized
+			clf = LogisticRegression(random_state=0, solver='lbfgs', multi_class = 'multinomial', C=10, class_weight={0:1,1:5})
 			clf.fit(X_train, y_train)
-			pred = clf.predict_proba(X_test)[:,1]
-			y_test_pred = np.array(pred)
+
+			# probability scaler
+			pred = MinMaxScaler().fit_transform(clf.predict_proba(X_test))
+
+			y_test_pred = np.array(pred[:,1])
 			y_test_pred[y_test_pred>=threshold] = 1
 			y_test_pred[y_test_pred<threshold] = 0
 
 			prec, rec, fscore, _ = precision_recall_fscore_support(y_test, y_test_pred, average='binary')
-			print (prec, rec, fscore)
+			# print (prec, rec, fscore)
 			scores.append((prec, rec, fscore))
 		
 		prec = np.mean([score[0] for score in scores])
@@ -87,10 +96,7 @@ for i in range(Y.shape[1]):
 	print ("Best scores of ",  score_thresholdwise[index]," for label: ", i, " at threshold: ", thresholds[index])
 	score_labelwise.append(score_thresholdwise[index]) 
 
+best_score = [np.mean([score[0] for score in score_labelwise]), np.mean([score[1] for score in score_labelwise]), np.mean([score[2] for score in score_labelwise])]
 
-
-best_score = [[np.mean([score[0] for score in score_labelwise]), np.mean([score[1] for score in score_labelwise]), np.mean([score[2] for score in score_labelwise])]]
-
-
-print (best_score)
+print ("Final scores:: Precision:", best_score[0], " Recall:", best_score[1], "F1 score:", best_score[2])
 
